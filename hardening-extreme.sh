@@ -32,13 +32,14 @@ systemctl start cloudflared
 
 echo "=== Configure Netplan DNS to 127.0.0.1 with fallback ==="
 NETPLAN_FILE=$(ls /etc/netplan/*.yaml | head -n 1)
-cp $NETPLAN_FILE ${NETPLAN_FILE}.bak
-sed -i '/nameservers:/,/addresses:/c\      nameservers:\n        addresses:\n          - 127.0.0.1\n          - 1.1.1.1\n          - 8.8.8.8' $NETPLAN_FILE
+cp "$NETPLAN_FILE" "${NETPLAN_FILE}.bak"
+sed -i '/nameservers:/,/addresses:/c\      nameservers:\n        addresses:\n          - 127.0.0.1\n          - 1.1.1.1\n          - 8.8.8.8' "$NETPLAN_FILE"
 netplan apply
 rm -f /etc/resolv.conf
 echo -e "nameserver 127.0.0.1\nnameserver 1.1.1.1\nnameserver 8.8.8.8" > /etc/resolv.conf
 
 echo "=== Setup UFW Firewall ==="
+ufw --force reset
 ufw allow 22/tcp
 ufw allow 80/tcp
 ufw allow 443/tcp
@@ -64,23 +65,22 @@ EOF
 systemctl restart fail2ban
 systemctl enable fail2ban
 
-echo "=== Setup iptables Anti-DDoS and Port Scanning Protection ==="
+echo "=== Setup iptables Anti-DDoS, Connection Limit, and Port Scanning Protection ==="
 iptables -F
 iptables -X
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
 
-# Basic protection
-iptables -A INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
-iptables -A INPUT -p tcp --syn -m limit --limit 2/second --limit-burst 25 -j ACCEPT
+iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+iptables -A INPUT -p tcp --syn -m limit --limit 2/second --limit-burst 20 -j ACCEPT
 iptables -A INPUT -p tcp --tcp-flags ALL SYN,ACK,FIN,RST RST -m limit --limit 2/second --limit-burst 2 -j ACCEPT
 iptables -A INPUT -p icmp -m limit --limit 1/second --limit-burst 5 -j ACCEPT
 iptables -A INPUT -p udp -m length --length 0:28 -j DROP
-iptables -A INPUT -p udp -m limit --limit 50/second --limit-burst 50 -j ACCEPT
+iptables -A INPUT -p udp -m limit --limit 30/second --limit-burst 30 -j ACCEPT
 
 # Limit Connections per IP
-iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 30 -j DROP
+iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 100 -j DROP
 
 # Anti Port Scanning
 iptables -N PORT-SCANNING
@@ -122,5 +122,5 @@ cat > /etc/cron.d/monitor-cloudflared <<EOF
 EOF
 
 echo "=== FINISH ==="
-echo "✅ Server full ultra-secure: Cloudflare DoH + Firewall Lock + Fail2Ban + BBRv2 + Anti DDoS + Port Scan Block"
-echo "✅ Direkomendasikan reboot server untuk mengaktifkan semua fitur penuh!"
+echo "✅ Server ultra-secure: Cloudflare DoH + Firewall Lock + Fail2Ban + BBRv2 + Anti-DDoS + Port Scan Block"
+echo "✅ Direkomendasikan reboot server setelah selesai setup!"
