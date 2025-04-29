@@ -73,14 +73,14 @@ iptables -P FORWARD DROP
 iptables -P OUTPUT ACCEPT
 
 iptables -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-iptables -A INPUT -p tcp --syn -m limit --limit 2/second --limit-burst 20 -j ACCEPT
+iptables -A INPUT -p tcp --syn -m limit --limit 20/second --limit-burst 100 -j ACCEPT
 iptables -A INPUT -p tcp --tcp-flags ALL SYN,ACK,FIN,RST RST -m limit --limit 2/second --limit-burst 2 -j ACCEPT
 iptables -A INPUT -p icmp -m limit --limit 1/second --limit-burst 5 -j ACCEPT
 iptables -A INPUT -p udp -m length --length 0:28 -j DROP
-iptables -A INPUT -p udp -m limit --limit 30/second --limit-burst 30 -j ACCEPT
+iptables -A INPUT -p udp -m limit --limit 100/second --limit-burst 200 -j ACCEPT
 
 # Limit Connections per IP
-iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 100 -j DROP
+iptables -A INPUT -p tcp --syn -m connlimit --connlimit-above 300 -j DROP
 
 # Anti Port Scanning
 iptables -N PORT-SCANNING
@@ -92,8 +92,8 @@ netfilter-persistent save
 netfilter-persistent reload
 
 echo "=== Enable TCP Stack Optimization & BBRv2 ==="
-cat >> /etc/sysctl.conf <<EOF
-
+# Clean and append once
+cat > /etc/sysctl.d/99-bbr-tune.conf <<EOF
 # Anti DDoS Protection
 net.ipv4.tcp_syncookies = 1
 net.ipv4.tcp_synack_retries = 2
@@ -112,9 +112,13 @@ net.ipv4.tcp_mtu_probing = 1
 # Enable BBRv2
 net.core.default_qdisc = fq
 net.ipv4.tcp_congestion_control = bbr
+
+# General tuning
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
 EOF
 
-sysctl -p
+sysctl --system
 
 echo "=== Setup Cloudflared Health Monitor ==="
 cat > /etc/cron.d/monitor-cloudflared <<EOF
